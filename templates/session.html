@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Calculator</title>
+  <style type="text/css">
+    body {
+      font-size: 18px;
+      padding: 50px 100px; 
+    }
+    .opr {
+      width: 30px;
+      color: blue;
+      display: inline-block;
+      font-weight: bold;
+      margin: 5px 0 0 10px;
+    }
+    .input-exp {
+      margin-top: 20px;
+    }
+    #warning-msg {
+      color: red;
+      font-size: 14px;
+      display: none;
+    }
+    #calc-logs {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="help">
+    <div>Please type in the math operation you would like to complete:<br>
+      <div class="opr">+</div>for addition<br>
+      <div class="opr">-</div>for subtraction<br>
+      <div class="opr">*</div>for multiplication<br>
+      <div class="opr">/</div>for division<br>
+      <div class="opr">**</div>for power<br>
+      <div class="opr">%</div>for modulos<br>
+    </div>
+  </div>
+  
+  <form action="" method="POST" class="input-exp">
+    <input type="text" class="expression" placeholder="ex. 1 + 2"/>
+    <input type="submit" value="calc"/>
+  </form>
+  <span id="warning-msg">Invalid format</span>
+  <p id="status-msg" style='color: #aaa;'>No calculation yet..</p>
+  <div id="calc-logs"></div>
+
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+  <script type="text/javascript">
+    $(document).ready(function() {
+      var socket = io.connect('http://' + document.domain + ':' + location.port);
+      // var sender = new Date().getTime();
+      localStorage.setItem("sender", new Date().getTime());
+      var checkExpression = function(exp) {
+        var oprs = ['+', '-', '*', '/', '**', '%'];
+        var terms = exp.trim().split(/\s+/);
+        if (terms.length == 3 && oprs.indexOf(terms[1]) > -1 && +terms[0] && +terms[2]) {
+          return terms.join(' ');
+        } else {
+          return '';
+        }
+      }
+
+      var setCalcLog = function(flag, res, sender) {
+        $.ajax({
+          url: '/store',
+          type: 'post',
+          dataType: 'json',
+          contentType: 'application/json',
+          success: function (res) {
+            var data = res['data'];
+            $('div#calc-logs').empty();
+            if (data.length > 0) {
+              $('#status-msg').remove();
+            }
+            for (var i = 0; i < data.length; i++) {
+              $('div#calc-logs').prepend('<div>' + data[i]['calc'] + '</div>');
+            }
+          },
+          data: JSON.stringify({
+            calc: res,
+            add: flag, 
+            sender: sender
+          })
+        });
+      }
+      setCalcLog(false, '', localStorage.getItem("sender"));
+      socket.on('connect', function() {
+        // socket.emit('event', {
+        //   data: 'User Connected'
+        // })
+        var form = $('form').on('submit', function(e) {
+          $("#warning-msg").hide();
+          e.preventDefault();
+          var expression = checkExpression($('input.expression').val());
+          if (!expression) {
+            $("#warning-msg").show();
+            return;
+          }
+          var sender = new Date().getTime();
+          localStorage.setItem("sender", sender);
+          socket.emit('event', {
+            exp: expression,
+            sender: sender
+          });
+          $('input.expression').val('').focus();
+          
+        })
+      })
+      socket.on('response', function(msg) {
+        if(typeof msg.result !== 'undefined') {
+          if (msg.sender == localStorage.getItem("sender")) {
+            setCalcLog(true, msg.result[1], msg.sender);
+          } else {
+            setCalcLog(true, msg.result[0], msg.sender);
+          }
+          
+        }
+      })
+    });
+    
+  </script>
+
+</body>
+</html>
